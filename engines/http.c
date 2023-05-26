@@ -634,13 +634,18 @@ static enum fio_q_status fio_http_queue(struct thread_data *td,
 	struct http_data *http = td->io_ops_data;
 	struct http_options *o = td->eo;
 	struct http_curl_stream _curl_stream;
+    struct http_curl_stream _write_stream;
 	struct curl_slist *slist = NULL;
 	char object[512];
 	char url[1024];
+    char write_buf[1024];
 	long status;
 	CURLcode res;
 	int r = -1;
 
+    _write_stream.buf = write_buf;
+    _write_stream.pos = 0;
+    _write_stream.max = 1023;
 	fio_ro_check(td, io_u);
 	memset(&_curl_stream, 0, sizeof(_curl_stream));
 	snprintf(object, sizeof(object), "%s_%llu_%llu", td->files[0]->file_name,
@@ -664,7 +669,7 @@ static enum fio_q_status fio_http_queue(struct thread_data *td,
 
 	if (io_u->ddir == DDIR_WRITE) {
 		curl_easy_setopt(http->curl, CURLOPT_READDATA, &_curl_stream);
-		curl_easy_setopt(http->curl, CURLOPT_WRITEDATA, NULL);
+		curl_easy_setopt(http->curl, CURLOPT_WRITEDATA, &_write_stream);
 		curl_easy_setopt(http->curl, CURLOPT_UPLOAD, 1L);
 		res = curl_easy_perform(http->curl);
 		if (res == CURLE_OK) {
@@ -672,6 +677,7 @@ static enum fio_q_status fio_http_queue(struct thread_data *td,
 			if (status == 100 || (status >= 200 && status <= 204))
 				goto out;
 			log_err("DDIR_WRITE failed with HTTP status code %ld\n", status);
+            log_err("err message %s\n", _write_stream.buf);
 		}
 		goto err;
 	} else if (io_u->ddir == DDIR_READ) {
